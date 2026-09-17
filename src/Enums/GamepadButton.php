@@ -2,24 +2,23 @@
 
 namespace DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Enums;
 
-enum GamepadButton: string
+/** A face or menu button, backed by its seesaw GPIO pin. Pressed reads low. */
+enum GamepadButton: int
 {
-    case A = 'a';
-    case B = 'b';
-    case X = 'x';
-    case Y = 'y';
-    case START = 'start';
-    case SELECT = 'select';
+    case SELECT = 0;
+    case B = 1;
+    case Y = 2;
+    case A = 5;
+    case X = 6;
+    case START = 16;
 
-    public function pin(): GamepadPin
+    public function mask(): int
     {
-        return GamepadPin::from(match ($this) {
-            self::A => GamepadPin::A->value,
-            self::B => GamepadPin::B->value,
-            self::X => GamepadPin::X->value,
-            self::Y => GamepadPin::Y->value,
-            self::START => GamepadPin::START->value,
-            self::SELECT => GamepadPin::SELECT->value,
-        });
+        return 1 << $this->value;
+    }
+
+    public static function allMask(): int
+    {
+        return array_reduce(self::cases(), static fn (int $mask, self $button): int => $mask | $button->mask(), 0);
     }
 }

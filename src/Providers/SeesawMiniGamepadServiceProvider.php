@@ -2,16 +2,23 @@
 
 namespace DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Providers;
 
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
-use Fabricate\NutsAndBolts\MagicAliases\Circuit;
-use Fabricate\NutsAndBolts\ServiceProvider;
+use Voyager\NutsAndBolts\ServiceProvider;
 
+/**
+ * The gamepad's wiring config lives under the circuits tree: config('circuits.seesaw-mini-gamepad'),
+ * published to config/circuits/seesaw-mini-gamepad.php, which the config loader keys the same way.
+ */
 class SeesawMiniGamepadServiceProvider extends ServiceProvider
 {
-    public function register(): void {}
+    public function register(): void
+    {
+        $this->mergeConfigFrom(dirname(__DIR__, 2).'/config/seesaw-mini-gamepad.php', 'circuits.seesaw-mini-gamepad');
+    }
 
     public function boot(): void
     {
-        Circuit::addCircuit('seesaw-mini-gamepad', SeesawMiniGamepad::class);
+        $this->publishes([
+            dirname(__DIR__, 2).'/config/seesaw-mini-gamepad.php' => $this->app->configPath('circuits/seesaw-mini-gamepad.php'),
+        ], 'seesaw-mini-gamepad-config');
     }
 }
