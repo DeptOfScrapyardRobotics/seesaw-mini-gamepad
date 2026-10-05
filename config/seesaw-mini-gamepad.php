@@ -15,6 +15,11 @@ return [
                 'device' => '',
                 'pin' => 0,
             ],
+            'hold_ms' => null,            // null keeps 500
+            'invert_x' => null,           // null keeps true: right reads +1.0
+            'invert_y' => null,           // null keeps false: up reads -1.0
+            'button_interrupts' => null,  // null keeps false
+            'reset_wait_ms' => null,      // null keeps 500
         ],
     ],
 ];

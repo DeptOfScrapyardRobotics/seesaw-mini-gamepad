@@ -2,6 +2,7 @@
 
 namespace DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad;
 
+use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Concerns\ConjuresSeesawMiniGamepad;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Concerns\SeesawMiniGamepadBootstrap;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Enums\GamepadAxis;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Enums\GamepadButton;
@@ -12,6 +13,7 @@ use GeneralPurposeIO\IntegratedCircuits\Bootable;
 /** Adafruit Mini I2C STEMMA QT Gamepad (product 5743): six buttons and a two-axis joystick on seesaw. */
 class SeesawMiniGamepad extends Bootable implements Actuator
 {
+    use ConjuresSeesawMiniGamepad;
     use SeesawMiniGamepadBootstrap;
 
     protected int $product_id = 5743;

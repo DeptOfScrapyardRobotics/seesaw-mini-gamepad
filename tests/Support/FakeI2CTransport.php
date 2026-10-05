@@ -16,6 +16,9 @@ final class FakeI2CTransport extends I2CTransport
     /** Bytes write() claims it sent short of the payload. */
     public int $short_by = 0;
 
+    /** @var list<list<int>> payloads write() answers -1 for, as a NACK */
+    public array $refuse = [];
+
     public bool $closed = false;
 
     public function __construct(int $address = 0x50)
@@ -45,7 +48,7 @@ final class FakeI2CTransport extends I2CTransport
         $bytes = is_array($data) ? array_values($data) : array_values(unpack('C*', $data));
         $this->log[] = ['w', $bytes];
 
-        return count($bytes) - $this->short_by;
+        return in_array($bytes, $this->refuse, true) ? -1 : count($bytes) - $this->short_by;
     }
 
     public function writeRead(array|string $bytes_to_write, int $bytes_to_read): array|false
@@ -59,6 +62,11 @@ final class FakeI2CTransport extends I2CTransport
     }
 
     public function close(): void
+    {
+        $this->closed = true;
+    }
+
+    protected function release(): void
     {
         $this->closed = true;
     }

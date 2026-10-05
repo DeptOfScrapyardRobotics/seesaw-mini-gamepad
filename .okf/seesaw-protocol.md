@@ -4,7 +4,7 @@ title: Seesaw protocol
 description: How the package frames seesaw registers, the read delay, the opcodes it uses and the hardware IDs it accepts.
 tags: [seesaw, protocol, registers, i2c]
 status: draft
-generated: { by: claude-opus-5/claude-code, at: "2026-09-16T00:00:00Z" }
+generated: { by: claude-opus/5.5, at: 2026-10-04T23:40:00Z }
 sources:
   - id: transport
     resource: src/Transports/SeesawI2CTransport.php
@@ -29,7 +29,7 @@ From `SeesawOpCode`.[^opcodes]
 |---|---|---|
 | `STATUS_HW_ID` | 0x0001 | 1 byte chip ID |
 | `STATUS_VERSION` | 0x0002 | 4 bytes: product << 16 \| date |
-| `STATUS_SWRST` | 0x007F | write 0xFF → firmware restart |
+| `STATUS_SWRST` | 0x007F | write 0xFF → firmware restart, before the ACK |
 | `GPIO_DIRCLR_BULK` / `DIRSET` | 0x0103 / 0x0102 | 4-byte pin mask |
 | `GPIO_BULK` | 0x0104 | read all levels |
 | `GPIO_BULK_SET` | 0x0105 | drive high / pull up |

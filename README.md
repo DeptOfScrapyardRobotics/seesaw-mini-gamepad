@@ -1,16 +1,28 @@
 # seesaw-mini-gamepad
 
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/dept-of-scrapyard-robotics/seesaw-mini-gamepad.svg)](https://packagist.org/packages/dept-of-scrapyard-robotics/seesaw-mini-gamepad)
+[![License](https://img.shields.io/packagist/l/dept-of-scrapyard-robotics/seesaw-mini-gamepad.svg)](LICENSE)
+
 Read the Adafruit Mini I2C STEMMA QT Gamepad from PHP: six buttons and a two-axis joystick, over I2C with the ScrapyardIO GPIO framework.
 
 `dept-of-scrapyard-robotics/seesaw-mini-gamepad` boots the gamepad's seesaw firmware, sets up its button pins, and turns each poll into button presses, releases, holds and joystick positions from -1.0 to 1.0. It talks to seesaw directly, so no separate seesaw package is needed.
 
+```
+ext-posi / ext-ftdi            1:1 system and libftdi calls
+  → microscrap/*               libgpiod, i2c-dev, libmpsse in PHP
+    → microscrap/scrapyard-*   adapters: the `native` and `usb` drivers
+      → scrapyard-io/framework protocol managers, transports, the circuit catalog
+        → dept-of-scrapyard-robotics/seesaw-mini-gamepad   ← this package
+```
+
 ## Requirements
 
 - PHP 8.4 or newer
-- A Venusian application with `scrapyard-io/framework` 0.8
+- A Venusian 0.10 application with the `scrapyard-io/framework` 0.10 components (`gpio/i2c`, `gpio/digital`, `gpio/integrated-circuits`)
 - An adapter for your hardware:
-  - `microscrap/scrapyard-linux` for native `i2c-dev` and `libgpiod` (needs `ext-posi`)
-  - `microscrap/scrapyard-usb` for FTDI MPSSE boards such as the FT232H (needs `ext-ftdi`)
+  - `microscrap/scrapyard-linux` (driver `native`) for native `i2c-dev` and `libgpiod`, needs `ext-posi`
+  - `microscrap/scrapyard-usb` (driver `usb`) for FTDI MPSSE boards such as the FT232H, needs `ext-ftdi`
+- `venusian-voyager/io-pools` 0.10 if you poll on the event loop
 
 ## Installation
 
@@ -18,31 +30,36 @@ Read the Adafruit Mini I2C STEMMA QT Gamepad from PHP: six buttons and a two-axi
 composer require dept-of-scrapyard-robotics/seesaw-mini-gamepad
 ```
 
-The service provider is discovered automatically. It merges the package's wiring config under `circuits.seesaw-mini-gamepad`. To publish that config into your app, run:
+The service provider is discovered automatically. It merges the package's wiring config under `circuits.seesaw-mini-gamepad` and registers the gamepad with the circuit catalog. To publish the config into your app, run:
 
 ```bash
 php computer vendor:publish --tag=seesaw-mini-gamepad-config
 ```
 
-That writes `config/circuits/seesaw-mini-gamepad.php`.
+That writes `config/circuits/seesaw-mini-gamepad.php`, with `driver => 'none'` until you fill in your bench.
 
 ## Quick start
 
-A gamepad at `0x50` on a Raspberry Pi's `i2c-1`:
+A gamepad at `0x50` on a Raspberry Pi's I2C bus 1:
+
+```php
+// config/circuits/seesaw-mini-gamepad.php
+return [
+    'default_config' => 'i2c',
+    'configs' => [
+        'i2c' => [
+            'driver' => 'native',
+            'device' => 1,
+            'slave' => 0x50,
+        ],
+    ],
+];
+```
 
 ```php
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Enums\GamepadButton;
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Enums\SeesawMiniGamepadI2CAddress;
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Transports\SeesawI2CTransport;
-use GeneralPurposeIO\I2C\I2C;
 
-$slave = I2C::driver('native')
-    ->connectTo(1)
-    ->register()
-    ->device(1, SeesawMiniGamepadI2CAddress::DEFAULT->value);
-
-$pad = new SeesawMiniGamepad(new SeesawI2CTransport($slave), boot_now: true);
+$pad = app('circuit')->conjure('seesaw-mini-gamepad');   // connected and booted
 
 while (true) {
     $pad->poll();
@@ -56,45 +73,43 @@ while (true) {
 }
 ```
 
-Booting resets the seesaw firmware, which takes about half a second. It then checks that the chip is a seesaw running the Mini Gamepad firmware (product 5743), and sets every button pin to input with pull-up.
+Booting resets the seesaw firmware and waits `reset_wait_ms` (500 ms) for it to come back; on a Raspberry Pi 5 the whole boot takes about 510 ms. It then checks that the chip is a seesaw running the Mini Gamepad firmware (product 5743), and sets every button pin to input with pull-up.
 
 ## Connecting
 
-The gamepad takes a `SeesawI2CTransport`. It wraps an I2C connection from the framework, plus an optional IRQ input.
+`conjure('seesaw-mini-gamepad')` reads `circuits.seesaw-mini-gamepad`, picks `default_config`, and calls the gamepad's `i2c()` factory with that entry's keys. You can call the factory directly too:
 
 ```php
-use GeneralPurposeIO\Digital\DigitalIO;
-use GeneralPurposeIO\I2C\I2C;
+use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
 
-// Linux i2c-dev and gpiochip0
-$slave = I2C::driver('native')->connectTo(1)->register()->device(1, 0x50);
-$irq = DigitalIO::driver('native')->connectTo(0)->register()->input(0, 17);
+$pad = SeesawMiniGamepad::i2c('native', 1, slave: 0x50);
 
-// FTDI MPSSE
-$slave = I2C::driver('usb')->connectTo('ft232h')->register()->device('ft232h', 0x50);
+// with IRQ on GPIO17 and button interrupts on
+$pad = SeesawMiniGamepad::i2c(
+    'native', 1,
+    irq: ['enabled' => true, 'driver' => 'native', 'device' => 0, 'pin' => 17],
+    button_interrupts: true,
+);
+```
+
+A bus or pin device that isn't connected yet is connected by the factory. One your app already connected is shared as it is. The IRQ pin is opened after the bus, so on an FT232H it rides the same USB context. The settings arguments (`hold_ms`, `invert_x`, `invert_y`, `button_interrupts`, `reset_wait_ms`) default to `null`, which keeps the configuration object's defaults. Pass `boot_now: false` to build without booting.
+
+### Building the transport yourself
+
+```php
+use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Transports\SeesawI2CTransport;
+
+$slave = app('gpio.i2c')->driver('native')->connectTo(1)->register()->device(1, 0x50);
+$irq = app('gpio.digital')->driver('native')->connectTo(0)->register()->input(0, 17);
 
 $pad = new SeesawMiniGamepad(new SeesawI2CTransport($slave, $irq), boot_now: true);
 ```
 
 The default address is `0x50` (`SeesawMiniGamepadI2CAddress::DEFAULT`). Seesaw registers are a module byte and a function byte. Each read writes the register, waits, then reads in a separate transaction.
 
-### From the published config
-
-The config file holds your wiring. The package merges it but does not open connections from it, so read it where you build the gamepad:
-
-```php
-$name = config('circuits.seesaw-mini-gamepad.default_config');      // 'i2c'
-$wiring = config("circuits.seesaw-mini-gamepad.configs.{$name}");
-
-$slave = I2C::driver($wiring['driver'])
-    ->connectTo($wiring['device'])
-    ->register()
-    ->device($wiring['device'], $wiring['slave']);
-```
-
 ## Reading the gamepad
 
-Everything below answers from the last `poll()`. One poll reads the buttons and both joystick axes, in about 2.3 ms on a Raspberry Pi 5.
+Everything below answers from the last `poll()`. One poll reads the buttons and both joystick axes.
 
 ### Buttons
 
@@ -126,7 +141,7 @@ $pad->chord(GamepadButton::START, GamepadButton::SELECT);   // same as allDown()
 $pad->anyPressed();
 ```
 
-A press or release shows for exactly one poll. A press and release that both happen between two polls are not seen, so poll often.
+A press or release shows for exactly one poll. A press and release that both happen between two polls are not seen, so poll every 10 ms or so.
 
 `button(GamepadButton::A)` returns that button's `GamepadButtonState`, and `buttons()` returns all six keyed by name.
 
@@ -145,33 +160,28 @@ $pad->readAxisRaw(GamepadAxis::X);   // 0 … 1023, read now
 
 The stick rests near the middle of the 10-bit range, so it reads close to zero. With the defaults, right reads +1.0 and up reads -1.0, the way screen coordinates run. X is flipped by default to get that. Set `invert_y` to make up read +1.0 instead.
 
-### Polling on the dock
+### Polling on the event loop
 
 ```php
-use Voyager\IOPools\MagicAliases\IOPool;
+use Voyager\Contracts\IOPools\Loop;
 
-$recurrence = $pad->every(IOPool::gpio());    // poll() on every gpio tick
+$loop = app(Loop::class);
+
+$pad->every($loop);              // poll() every 10 ms
+$pad->every($loop, 0.02);        // every 20 ms
 // …
-$recurrence->stop();
+$pad->stop($loop);
 ```
 
-`every($gpio, $ticks, $name)` puts `poll()` on the gpio dock. Pass `$ticks` to poll less often, and `$name` when several gamepads share a dock. Polling on the dock and calling `poll()` yourself can be mixed.
+`every($loop, $interval_s, $name)` returns the loop `Timer` that runs `poll()`. Give each gamepad its own `$name` (default `seesaw-mini-gamepad`) to poll several side by side, and pass the same name to `stop()`. Polling on the loop and calling `poll()` yourself can be mixed.
 
 ## IRQ
 
 The gamepad has an IRQ pin. Seesaw pulls it low when a button changes and releases it when the change flags are read.
 
-With IRQ wired and `button_interrupts` on, a poll skips the button read while the pin is high. It reads the change flags and the buttons only when the pin is low. The first poll after boot always reads the buttons. The joystick has no interrupt, so each poll still reads both axes.
+With IRQ wired and `button_interrupts` on, a poll skips the button read while the pin is high. It reads the change flags and the buttons only when the pin is low. The first poll after boot always reads the buttons, so a button held through boot reads pressed then. The joystick has no interrupt, so each poll still reads both axes.
 
 ```php
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadConfiguration;
-
-$pad = new SeesawMiniGamepad(
-    new SeesawI2CTransport($slave, $irq),
-    new SeesawMiniGamepadConfiguration(button_interrupts: true),
-    boot_now: true,
-);
-
 $pad->button_interrupts = false;   // back to reading the buttons every poll
 ```
 
@@ -187,7 +197,7 @@ Without IRQ wired, or with `button_interrupts` off, every poll reads the buttons
 | `invert_x` | `true` | flip the X axis, so right reads +1.0 |
 | `invert_y` | `false` | flip the Y axis; off, up reads -1.0 |
 | `button_interrupts` | `false` | have seesaw pull IRQ low when a button changes |
-| `reset_wait_ms` | `500` | wait after the boot reset |
+| `reset_wait_ms` | `500` | wait after the boot reset; the firmware refuses writes for a few ms after it |
 
 ## Settings
 
@@ -208,14 +218,15 @@ $pad->button_interrupts = true;     // written to the chip straight away
 | `x`, `y` | yes | | `float` |
 | `axes` | yes | | `array` |
 
-Each has a matching method, such as `getProductId()` or `setHoldMs()`. `softwareReset()`, `setButtonPullups()`, `readGPIO()` and `readInterruptFlags()` reach the seesaw registers directly.
+Each has a matching method, such as `getProductId()` or `setHoldMs()`. `softwareReset()`, `setButtonPullups()`, `readGPIO()` and `readInterruptFlags()` reach the seesaw registers directly. The firmware restarts on the reset byte before acknowledging it, so `softwareReset()` ignores that write's result, as Adafruit's library does.
 
 ## Errors
 
-Failures throw `DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadException`, which extends the framework's `GPIOLevelException`:
+Failures throw `SeesawMiniGamepadException`, which descends from `GeneralPurposeIO\Contracts\IntegratedCircuits\CircuitException`:
 
 - The chip's hardware ID isn't a seesaw chip, or its product isn't 5743.
 - The bus writes fewer bytes than asked, refuses a read, or returns fewer bytes than asked.
+- The protocol driver hands back no bus or pin (`notConnected`).
 - `hold_ms` is negative.
 - Your code reads or writes a property or configuration key that doesn't exist.
 
@@ -233,11 +244,23 @@ $pad->close();
 
 | Key | Default | Meaning |
 |---|---|---|
-| `default_config` | `'i2c'` | which entry under `configs` to use |
+| `default_config` | `'i2c'` | which entry under `configs` `conjure()` uses |
 | `configs.i2c.driver` | `'none'` | I2C adapter: `native` or `usb` |
 | `configs.i2c.device` | `''` | a bus number, or `ft232h` |
 | `configs.i2c.slave` | `0x50` | gamepad address |
 | `configs.i2c.irq` | disabled, pin 0 | `enabled`, `driver`, `device` and `pin` for IRQ |
+| `configs.i2c.hold_ms`, `invert_x`, `invert_y`, `button_interrupts`, `reset_wait_ms` | `null` | settings; null keeps the configuration object's default |
+| `configs.i2c.boot_now` | `true` | boot during `conjure()` |
+
+## Upgrading from 0.8
+
+| 0.8 | 0.10 |
+|---|---|
+| `scrapyard-io/framework` 0.8 components, `surface/contracts` | the 0.10 components; no Surface requirement |
+| `I2C::driver(...)`, `DigitalIO::driver(...)` | `app('circuit')->conjure()`, `SeesawMiniGamepad::i2c()`, or `app('gpio.i2c')->driver(...)` |
+| the package merged config but never read it | `conjure()` builds the gamepad from it |
+| `$pad->every(IOPool::gpio(), $ticks)` → `Recurrence` | `$pad->every($loop, $interval_s)` → loop `Timer`; `$pad->stop($loop)` |
+| implements Surface's `GameController`; methods took Surface's `GamepadButton` / `GamepadAxis` too | Surface 0.10 has no HumanInput contracts; the chip's `GamepadButton` / `GamepadAxis` only |
 
 ## Testing
 
@@ -246,7 +269,11 @@ composer install
 vendor/bin/pest
 ```
 
-The suite runs against a recording fake of the I2C bus and a fake IRQ pin, so it needs no hardware. The boot sequence is checked byte for byte.
+The suite runs against a recording fake of the I2C bus and a fake IRQ pin, so it needs no hardware. The boot sequence is checked byte for byte. The gamepad was also exercised on a Raspberry Pi 5's I2C bus for this release: all six buttons pressed and released, Start reported holding after a second, and the stick read +1.0 right and -1.0 up.
+
+## Security
+
+The driver reads and writes seesaw registers on hardware the PHP process can open. See [SECURITY.md](SECURITY.md) for the support policy and how to report a vulnerability.
 
 ## License
 

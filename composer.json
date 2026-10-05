@@ -2,7 +2,7 @@
     "name": "dept-of-scrapyard-robotics/seesaw-mini-gamepad",
     "description": "Read the Adafruit Mini I2C Gamepad (seesaw) over I2C with the ScrapyardIO GPIO framework.",
     "type": "library",
-    "version": "0.8.0",
+    "version": "0.10.0",
     "keywords": [
         "seesaw",
         "gamepad",
@@ -21,22 +21,25 @@
     ],
     "require": {
         "php": "^8.4|^8.5|^8.6",
-        "gpio/contracts": "^0.8.0",
-        "gpio/integrated-circuits": "^0.8.0",
-        "venusian-voyager/nuts-and-bolts": "^0.8.0"
+        "gpio/contracts": "^0.10.0",
+        "gpio/integrated-circuits": "^0.10.0",
+        "venusian-voyager/contracts": "^0.10.0",
+        "venusian-voyager/nuts-and-bolts": "^0.10.0",
+        "venusian-voyager/vessel": "^0.10.0"
     },
     "require-dev": {
-        "gpio/digital": "^0.8.0",
-        "gpio/i2c": "^0.8.0",
+        "gpio/digital": "^0.10.0",
+        "gpio/i2c": "^0.10.0",
         "pestphp/pest": "^4",
-        "venusian-voyager/config": "^0.8.0",
-        "venusian-voyager/vessel": "^0.8.0"
+        "venusian-voyager/config": "^0.10.0",
+        "venusian-voyager/io-pools": "^0.10.0"
     },
     "suggest": {
-        "gpio/digital": "^0.8.0 - IRQ interrupt pin",
-        "gpio/i2c": "^0.8.0 - I2C connections for SeesawI2CTransport",
-        "microscrap/scrapyard-linux": "^0.8.0 - native i2c-dev and libgpiod drivers",
-        "microscrap/scrapyard-usb": "^0.8.0 - MPSSE I2C and pins over FTDI"
+        "gpio/digital": "^0.10.0 - IRQ interrupt pin",
+        "gpio/i2c": "^0.10.0 - I2C connections for SeesawI2CTransport",
+        "venusian-voyager/io-pools": "^0.10.0 - the event loop every() polls on",
+        "microscrap/scrapyard-linux": "^0.10.0 - native i2c-dev and libgpiod drivers",
+        "microscrap/scrapyard-usb": "^0.10.0 - MPSSE I2C and pins over FTDI"
     },
     "autoload": {
         "psr-4": {
@@ -50,7 +53,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-main": "0.8.x-dev"
+            "dev-main": "0.10.x-dev"
         },
         "venusian": {
             "providers": [
@@ -65,43 +68,5 @@
         }
     },
     "minimum-stability": "dev",
-    "prefer-stable": true,
-    "repositories": [
-        {
-            "type": "path",
-            "url": "/Volumes/ProjectSaturnStudios/Development/PHP/ProjectSaturnStudios/dev/scrapyard-io/framework/src/GeneralPurposeIO/*",
-            "options": {
-                "symlink": true,
-                "versions": {
-                    "gpio/contracts": "0.8.0",
-                    "gpio/digital": "0.8.0",
-                    "gpio/i2c": "0.8.0",
-                    "gpio/integrated-circuits": "0.8.0",
-                    "gpio/nuts-and-bolts": "0.8.0",
-                    "gpio/pwm": "0.8.0",
-                    "gpio/spi": "0.8.0",
-                    "gpio/uart": "0.8.0"
-                }
-            }
-        },
-        {
-            "type": "path",
-            "url": "/Volumes/ProjectSaturnStudios/Development/PHP/ProjectSaturnStudios/dev/venusian/framework/src/Voyager/*",
-            "options": {
-                "symlink": true,
-                "versions": {
-                    "venusian-voyager/collections": "0.8.8",
-                    "venusian-voyager/conditionable": "0.8.8",
-                    "venusian-voyager/config": "0.8.8",
-                    "venusian-voyager/contracts": "0.8.8",
-                    "venusian-voyager/io-pools": "0.8.8",
-                    "venusian-voyager/macroable": "0.8.8",
-                    "venusian-voyager/magic-aliases": "0.8.8",
-                    "venusian-voyager/nuts-and-bolts": "0.8.8",
-                    "venusian-voyager/reflection": "0.8.8",
-                    "venusian-voyager/vessel": "0.8.8"
-                }
-            }
-        }
-    ]
+    "prefer-stable": true
 }

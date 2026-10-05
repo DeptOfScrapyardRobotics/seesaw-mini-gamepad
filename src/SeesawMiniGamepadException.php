@@ -36,6 +36,11 @@ class SeesawMiniGamepadException extends CircuitException
         return new static(sprintf('Seesaw register 0x%04X: wanted %d bytes, got %d.', $register, $wanted, $got));
     }
 
+    public static function notConnected(string $protocol, string $driver, string|int $device): static
+    {
+        return new static("Seesaw gamepad could not get a {$protocol} connection from driver [{$driver}] on device [{$device}].");
+    }
+
     public static function invalidHoldTime(int $hold_ms): static
     {
         return new static("hold_ms takes 0 or more; got {$hold_ms}.");

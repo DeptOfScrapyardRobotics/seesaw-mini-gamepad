@@ -9,9 +9,9 @@ use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\GamepadButtonState;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadConfiguration;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadException;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Transports\SeesawI2CTransport;
-use GeneralPurposeIO\Contracts\Core\GPIOResourceDriver;
-use GeneralPurposeIO\Contracts\Core\Recurrence;
 use GeneralPurposeIO\Contracts\Digital\DigitalInTransport;
+use Voyager\Contracts\IOPools\Loop;
+use Voyager\Contracts\IOPools\LoopResources\Timer;
 
 trait SeesawMiniGamepadAPI
 {
@@ -63,10 +63,17 @@ trait SeesawMiniGamepadAPI
         return ($this->getVersion() >> 16) & 0xFFFF;
     }
 
-    /** Restart the seesaw firmware, then wait reset_wait_ms. Clears pull-ups and interrupts. */
+    /**
+     * Restart the seesaw firmware, then wait reset_wait_ms. Clears pull-ups and interrupts. The firmware restarts
+     * on the reset byte before acknowledging it, so the write reads as refused; Adafruit's begin() ignores it too.
+     */
     public function softwareReset(): void
     {
-        $this->sendCommand(SeesawOpCode::STATUS_SWRST, [0xFF]);
+        try {
+            $this->sendCommand(SeesawOpCode::STATUS_SWRST, [0xFF]);
+        } catch (SeesawMiniGamepadException) {
+        }
+
         usleep($this->config()->get('reset_wait_ms') * 1_000);
     }
 
@@ -173,10 +180,16 @@ trait SeesawMiniGamepadAPI
         return $this;
     }
 
-    /** Put poll() on the gpio dock. */
-    public function every(GPIOResourceDriver $gpio, int $ticks = 1, string $name = 'seesaw-mini-gamepad'): Recurrence
+    /** poll() every $interval_s seconds on the event loop, under $name. */
+    public function every(Loop $loop, float $interval_s = 0.01, string $name = 'seesaw-mini-gamepad'): Timer
     {
-        return $gpio->every($name, fn (): static => $this->poll(), $ticks);
+        return $loop->every($interval_s, fn (): static => $this->poll(), $name);
+    }
+
+    /** Take the every() timer named $name off the loop. */
+    public function stop(Loop $loop, string $name = 'seesaw-mini-gamepad'): void
+    {
+        $loop->forget($name);
     }
 
     /** IRQ's input when it is wired and button interrupts are on; null means read the buttons every poll. */
@@ -254,8 +267,13 @@ trait SeesawMiniGamepadAPI
         return $this->button($button)->wasReleased();
     }
 
-    public function isHolding(GamepadButton $button): bool
+    /** With $hold_ms given, compare it against heldMs(); otherwise use the configured threshold. */
+    public function isHolding(GamepadButton $button, ?int $hold_ms = null): bool
     {
+        if (! is_null($hold_ms)) {
+            return $this->isDown($button) && $this->heldMs($button) >= $hold_ms;
+        }
+
         return $this->button($button)->isHolding($this->config()->get('hold_ms'));
     }
 

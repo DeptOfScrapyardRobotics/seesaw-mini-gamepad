@@ -5,11 +5,12 @@ use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Providers\SeesawMiniGame
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Tests\Support\ConfigPathVessel;
 use Voyager\Config\Repository;
 use Voyager\NutsAndBolts\ServiceProvider;
-use Voyager\Vessel\Vessel;
+use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
+use GeneralPurposeIO\IntegratedCircuits\CircuitRegistry;
 
 it('registers the config under circuits.seesaw-mini-gamepad, keeping anything the app already set', function (): void {
-    $vessel = new Vessel;
-    $vessel->instance('config', new Repository(['circuits' => ['seesaw-mini-gamepad' => ['default_config' => 'bench']]]));
+    $vessel = new ConfigPathVessel;
+    $vessel->registerInstance('config', new Repository(['circuits' => ['seesaw-mini-gamepad' => ['default_config' => 'bench']]]));
 
     (new SeesawMiniGamepadServiceProvider($vessel))->register();
 
@@ -22,8 +23,8 @@ it('registers the config under circuits.seesaw-mini-gamepad, keeping anything th
 });
 
 it('leaves other circuits config beside its own key untouched', function (): void {
-    $vessel = new Vessel;
-    $vessel->instance('config', new Repository(['circuits' => ['vl6180x' => ['default_config' => 'i2c']]]));
+    $vessel = new ConfigPathVessel;
+    $vessel->registerInstance('config', new Repository(['circuits' => ['vl6180x' => ['default_config' => 'i2c']]]));
 
     (new SeesawMiniGamepadServiceProvider($vessel))->register();
 
@@ -35,7 +36,7 @@ it('leaves other circuits config beside its own key untouched', function (): voi
 
 it('publishes the config file into config/circuits under the seesaw-mini-gamepad-config tag', function (): void {
     $app = new ConfigPathVessel('/app/config');
-    $app->instance('config', new Repository);
+    $app->registerInstance('config', new Repository);
 
     $provider = new SeesawMiniGamepadServiceProvider($app);
     $provider->register();
@@ -46,4 +47,16 @@ it('publishes the config file into config/circuits under the seesaw-mini-gamepad
     expect(ServiceProvider::pathsToPublish(SeesawMiniGamepadServiceProvider::class, 'seesaw-mini-gamepad-config'))->toBe([
         "{$root}/config/seesaw-mini-gamepad.php" => '/app/config/circuits/seesaw-mini-gamepad.php',
     ]);
+});
+
+it('adds the gamepad to the circuit catalog when one is bound', function (): void {
+    $app = new ConfigPathVessel;
+    $app->registerInstance('config', new Repository);
+    $app->registerInstance('circuit', $catalog = new CircuitRegistry);
+
+    $provider = new SeesawMiniGamepadServiceProvider($app);
+    $provider->register();
+    $provider->boot();
+
+    expect($catalog->listCircuits())->toBe(['seesaw-mini-gamepad' => SeesawMiniGamepad::class]);
 });

@@ -6,55 +6,10 @@ use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\GamepadButtonState;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadConfiguration;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepadException;
-use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Tests\Support\FakeGPIOResource;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Tests\Support\FakeI2CTransport;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Tests\Support\FakeInterruptPin;
 use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Transports\SeesawI2CTransport;
-use GeneralPurposeIO\Contracts\Core\Recurrence;
-
-/** Every button pin: 0, 1, 2, 5, 6, 16. */
-const GAMEPAD_MASK = [0x00, 0x01, 0x00, 0x67];
-
-/** Version 0x166F7A97: product 5743, as read from the bench gamepad. */
-const GAMEPAD_BOOT_REPLIES = [[0x87], [0x16, 0x6F, 0x7A, 0x97]];
-
-/** A GPIO_BULK reply with these buttons pressed (low) and every other pin high. */
-function gpioWith(GamepadButton ...$pressed): array
-{
-    $value = 0xFFFFFFFF;
-
-    foreach ($pressed as $button) {
-        $value &= ~$button->mask();
-    }
-
-    return [($value >> 24) & 0xFF, ($value >> 16) & 0xFF, ($value >> 8) & 0xFF, $value & 0xFF];
-}
-
-function adc(int $value): array
-{
-    return [$value >> 8, $value & 0xFF];
-}
-
-/** One poll's replies: buttons, then X, then Y. */
-function pollReplies(array $gpio, int $x = 512, int $y = 512): array
-{
-    return [$gpio, adc($x), adc($y)];
-}
-
-/** @return array{0: SeesawMiniGamepad, 1: FakeI2CTransport} booted, boot traffic cleared */
-function gamepad(array $replies = [], ?FakeInterruptPin $irq = null, array $config = []): array
-{
-    $bus = new FakeI2CTransport;
-    $bus->replies = [...GAMEPAD_BOOT_REPLIES, ...$replies];
-    $pad = new SeesawMiniGamepad(
-        new SeesawI2CTransport($bus, $irq),
-        new SeesawMiniGamepadConfiguration(...['reset_wait_ms' => 0, ...$config]),
-        boot_now: true,
-    );
-    $bus->log = [];
-
-    return [$pad, $bus];
-}
+use Voyager\Contracts\IOPools\LoopResources\Timer;
 
 // --- boot ---------------------------------------------------------------------
 
@@ -75,6 +30,17 @@ it('boots like seesaw begin(), then sets the buttons up, byte for byte', functio
             ['w', [0x01, 0x05, ...GAMEPAD_MASK]],      // pull up, not down
             ['w', [0x01, 0x09, ...GAMEPAD_MASK]],      // button interrupts off
         ]);
+});
+
+it('boots through a refused reset write: the firmware restarts before acknowledging it', function (): void {
+    $bus = new FakeI2CTransport;
+    $bus->refuse = [[0x00, 0x7F, 0xFF]];
+    $bus->replies = GAMEPAD_BOOT_REPLIES;
+
+    $pad = new SeesawMiniGamepad(new SeesawI2CTransport($bus), new SeesawMiniGamepadConfiguration(reset_wait_ms: 0), boot_now: true);
+
+    expect($pad->hasBooted())->toBeTrue()
+        ->and($bus->log[0])->toBe(['w', [0x00, 0x7F, 0xFF]]);
 });
 
 it('turns button interrupts on at boot when configured', function (): void {
@@ -303,18 +269,47 @@ it('ignores IRQ while button interrupts are off, and follows the setting at runt
         ->and($pad->interruptLine())->toBeNull();
 });
 
-// --- dock -----------------------------------------------------------------------
+// --- event loop -----------------------------------------------------------------
 
-it('puts poll() on the gpio dock', function (): void {
-    [$pad, $bus] = gamepad(pollReplies(gpioWith(GamepadButton::SELECT)));
-    $gpio = new FakeGPIOResource;
+it('runs poll() on a named loop timer', function (): void {
+    [$pad, $bus] = gamepad(array_merge(...array_fill(0, 50, pollReplies(gpioWith(GamepadButton::SELECT)))));
+    $loop = testLoop();
+    $polls = 0;
+    $loop->every(0.001, function () use (&$polls, $bus, $loop): void {
+        $polls = intdiv(count($bus->log), 6);
 
-    $recurrence = $pad->every($gpio, 2);
+        if ($polls >= 2) {
+            $loop->stop();
+        }
+    }, 'watcher');
 
-    expect($recurrence)->toBeInstanceOf(Recurrence::class)
-        ->and($bus->log)->toBe([])
-        ->and($gpio->runRecurrence('seesaw-mini-gamepad'))->toBe($pad)
-        ->and($pad->pressedButtons())->toBe([GamepadButton::SELECT]);
+    $timer = $pad->every($loop, 0.001);
+
+    expect($timer)->toBeInstanceOf(Timer::class)->and($bus->log)->toBe([]);
+
+    $loop->run();
+    $pad->stop($loop);
+    $loop->forget('watcher');
+
+    expect($polls)->toBeGreaterThanOrEqual(2)
+        ->and($pad->isDown(GamepadButton::SELECT))->toBeTrue()
+        ->and($loop->registry->hasWork())->toBeFalse();
+});
+
+it('takes a timer name, so two gamepads poll side by side', function (): void {
+    [$left] = gamepad();
+    [$right] = gamepad();
+    $loop = testLoop();
+
+    $left->every($loop, 0.01, 'left.gamepad');
+    $right->every($loop, 0.01, 'right.gamepad');
+
+    expect($loop->registry->hasWork())->toBeTrue();
+
+    $left->stop($loop, 'left.gamepad');
+    $right->stop($loop, 'right.gamepad');
+
+    expect($loop->registry->hasWork())->toBeFalse();
 });
 
 // --- settings and errors -------------------------------------------------------------

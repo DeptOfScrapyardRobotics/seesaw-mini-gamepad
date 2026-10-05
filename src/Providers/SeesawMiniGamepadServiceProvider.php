@@ -2,6 +2,7 @@
 
 namespace DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\Providers;
 
+use DeptOfScrapyardRobotics\Actuators\SeesawMiniGamepad\SeesawMiniGamepad;
 use Voyager\NutsAndBolts\ServiceProvider;
 
 /**
@@ -20,5 +21,10 @@ class SeesawMiniGamepadServiceProvider extends ServiceProvider
         $this->publishes([
             dirname(__DIR__, 2).'/config/seesaw-mini-gamepad.php' => $this->app->configPath('circuits/seesaw-mini-gamepad.php'),
         ], 'seesaw-mini-gamepad-config');
+
+        // With the GPIO catalog installed, the gamepad is conjurable by slug: app('circuit')->conjure('seesaw-mini-gamepad').
+        if ($this->app->isBound('circuit')) {
+            $this->app->make('circuit')->addCircuit('seesaw-mini-gamepad', SeesawMiniGamepad::class);
+        }
     }
 }
